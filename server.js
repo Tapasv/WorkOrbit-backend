@@ -17,7 +17,7 @@ const port = process.env.PORT || 5000;
 const server = http.createServer(app);
 
 const corsOptions = {
-    origin: [process.env.CLIENT_URL || 'http://localhost:5173', 'https://workorbit-backend-27l6.onrender.com', 'https://work-orbit-frontend.vercel.app/'],
+    origin: [process.env.CLIENT_URL || 'http://localhost:5173', 'https://work-orbit-frontend.vercel.app'],
     methods: 'GET,POST,PUT,DELETE',
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
