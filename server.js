@@ -29,14 +29,14 @@ app.use(cors(corsOptions));
 
 app.use(express.json())
 
-// app.get('/api/health', (req, res) => {
-//   res.status(200).json({ 
-//     status: 'ok', 
-//     message: 'Server is running',
-//     timestamp: new Date(),
-//     uptime: process.uptime()
-//   });
-// });
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    message: 'Server is running',
+    timestamp: new Date(),
+    uptime: process.uptime()
+  });
+});
 
 DBconnect()
 
