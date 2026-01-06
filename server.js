@@ -12,6 +12,7 @@ const authUser = require('./Routes/authUser')
 const authRequest = require('./Routes/authRequest')
 const authAttendance = require('./Routes/authAttendance')
 const authTeams = require("./Routes/authTeams");
+const authNotification = require("./Routes/authNotification");
 
 const port = process.env.PORT || 5000;
 const server = http.createServer(app);
@@ -43,6 +44,7 @@ app.use('/api/auth', authUser)
 app.use('/api/request', authRequest)
 app.use('/api/attendance', authAttendance)
 app.use("/api/team", authTeams);
+app.use("/api/notification", authNotification);
 
 mongoose.connection.once('open', () => {
     console.log("✅ Connected to Database!");

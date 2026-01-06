@@ -2,6 +2,8 @@ const express = require('express')
 const router = express.Router();
 const { Authmiddlwhere, AdminOnly } = require('../middlewhere/Authmiddlewhere')
 const Request = require('../Schemas/Request');
+const User = require('../Schemas/User');
+const { createNotification, notificationTemplates } = require('../utils/notificationHelper');
 
 //  EMPLOYEE ROUTES
 
@@ -24,6 +26,7 @@ router.post('/create', Authmiddlwhere, async (req, res) => {
     }
 })
 
+// 🔔 1. WHEN EMPLOYEE SUBMITS REQUEST - NOTIFY MANAGER & ADMIN
 router.post('/:id/submit', Authmiddlwhere, async (req, res) => {
     try {
         if (req.user.role !== "Employee") {
@@ -49,6 +52,25 @@ router.post('/:id/submit', Authmiddlwhere, async (req, res) => {
 
         request.status = "SUBMITTED"
         await request.save()
+
+        // 🔔 NOTIFY ALL MANAGERS AND ADMINS
+        const managersAndAdmins = await User.find({ 
+            role: { $in: ['Manager', 'Admin'] } 
+        }).select('_id');
+
+        const template = notificationTemplates.REQUEST_SUBMITTED(request.title, req.user.username);
+
+        for (const user of managersAndAdmins) {
+            await createNotification({
+                recipient: user._id,
+                sender: req.user.id,
+                type: 'REQUEST_SUBMITTED',
+                title: template.title,
+                message: template.message,
+                relatedRequest: request._id,
+                link: user.role === 'Manager' ? '/manager' : '/admin'
+            });
+        }
 
         return res.status(201).json({ 'message': 'Request submitted successfully' })
     } catch (err) {
@@ -120,56 +142,121 @@ router.get('/pending', Authmiddlwhere, async (req, res) => {
     }
 })
 
-router.post('/:id/approve', Authmiddlwhere, async (req, res) => {
+// 🔔 2. WHEN MANAGER APPROVES - NOTIFY EMPLOYEE & ADMIN
+router.post("/:id/approve", Authmiddlwhere, async (req, res) => {
     try {
         if (req.user.role !== "Manager") {
-            return res.status(403).json({ 'message': 'Only Managers can approve requests' })
-        }
-
-        const request = await Request.findById(req.params.id);
-
-        if (!request) {
-            return res.status(404).json({ 'message': 'Request not found' })
-        }
-
-        if (request.status !== "SUBMITTED") {
-            return res.status(409).json({ 'message': 'Only submitted requests can be approved/rejected' })
-        }
-
-        request.status = "APPROVED"
-        await request.save()
-
-        return res.status(201).json({ 'message': 'Request Approved' })
-    } catch (err) {
-        console.error("Approve request error:", err.message);
-        return res.status(500).json({ message: "Failed to approve request" });
-    }
-})
-
-router.post('/:id/reject', Authmiddlwhere, async (req, res) => {
-    try {
-        if (req.user.role !== "Manager") {
-            return res.status(403).json({ 'message': 'Only Managers can reject requests' })
+            return res.status(403).json({ message: "Only managers can approve requests" });
         }
 
         const request = await Request.findById(req.params.id)
-
+            .populate('createdBy', '_id username');
+        
         if (!request) {
-            return res.status(404).json({ 'message': 'Request not found' })
+            return res.status(404).json({ message: "Request not found" });
         }
 
-        if (request.status !== "SUBMITTED") {
-            return res.status(409).json({ 'message': 'Only submitted requests can be approved/rejected' })
+        if (request.status !== "SUBMITTED" && request.status !== "REOPENED") {
+            return res.status(400).json({ message: "Only submitted requests can be approved" });
         }
 
-        request.status = "REJECTED"
-        await request.save()
-        return res.status(201).json({ 'message': 'Request Rejected' })
-    } catch (err) {
-        console.error("Reject request error:", err.message);
-        return res.status(500).json({ message: "Failed to reject request" });
+        request.status = "APPROVED";
+        request.reviewedBy = req.user.id;
+        request.reviewedAt = new Date();
+        await request.save();
+
+        const template = notificationTemplates.REQUEST_APPROVED(request.title, req.user.username);
+
+        // 🔔 NOTIFY EMPLOYEE WHO CREATED THE REQUEST
+        await createNotification({
+            recipient: request.createdBy._id,
+            sender: req.user.id,
+            type: 'REQUEST_APPROVED',
+            title: template.title,
+            message: template.message,
+            relatedRequest: request._id,
+            link: `/employee/my-requests`
+        });
+
+        // 🔔 NOTIFY ALL ADMINS
+        const admins = await User.find({ role: 'Admin' }).select('_id');
+        
+        for (const admin of admins) {
+            await createNotification({
+                recipient: admin._id,
+                sender: req.user.id,
+                type: 'REQUEST_APPROVED',
+                title: '✅ Request Approved',
+                message: `${req.user.username} approved request: "${request.title}" by ${request.createdBy.username}`,
+                relatedRequest: request._id,
+                link: '/admin'
+            });
+        }
+
+        res.json({ message: "Request approved successfully", request });
+    } catch (error) {
+        console.error('Error approving request:', error);
+        res.status(500).json({ message: "Failed to approve request", error: error.message });
     }
-})
+});
+
+// 🔔 3. WHEN MANAGER REJECTS - NOTIFY EMPLOYEE & ADMIN
+router.post("/:id/reject", Authmiddlwhere, async (req, res) => {
+    try {
+        if (req.user.role !== "Manager") {
+            return res.status(403).json({ message: "Only managers can reject requests" });
+        }
+
+        const request = await Request.findById(req.params.id)
+            .populate('createdBy', '_id username');
+        
+        if (!request) {
+            return res.status(404).json({ message: "Request not found" });
+        }
+
+        if (request.status !== "SUBMITTED" && request.status !== "REOPENED") {
+            return res.status(400).json({ message: "Only submitted requests can be rejected" });
+        }
+
+        request.status = "REJECTED";
+        request.reviewedBy = req.user.id;
+        request.reviewedAt = new Date();
+        await request.save();
+
+        const template = notificationTemplates.REQUEST_REJECTED(request.title, req.user.username);
+
+        // 🔔 NOTIFY EMPLOYEE WHO CREATED THE REQUEST
+        await createNotification({
+            recipient: request.createdBy._id,
+            sender: req.user.id,
+            type: 'REQUEST_REJECTED',
+            title: template.title,
+            message: template.message,
+            relatedRequest: request._id,
+            link: `/employee/my-requests`
+        });
+
+        // 🔔 NOTIFY ALL ADMINS
+        const admins = await User.find({ role: 'Admin' }).select('_id');
+        
+        for (const admin of admins) {
+            await createNotification({
+                recipient: admin._id,
+                sender: req.user.id,
+                type: 'REQUEST_REJECTED',
+                title: '❌ Request Rejected',
+                message: `${req.user.username} rejected request: "${request.title}" by ${request.createdBy.username}`,
+                relatedRequest: request._id,
+                link: '/admin'
+            });
+        }
+
+        res.json({ message: "Request rejected successfully", request });
+    } catch (error) {
+        console.error('Error rejecting request:', error);
+        res.status(500).json({ message: "Failed to reject request", error: error.message });
+    }
+});
 
 // ADMIN ROUTES
 
@@ -188,9 +275,12 @@ router.get('/all', Authmiddlwhere, AdminOnly, async (req, res) => {
     }
 });
 
+// 🔔 4. WHEN ADMIN CLOSES REQUEST - NOTIFY EMPLOYEE & MANAGER
 router.post('/:id/close', Authmiddlwhere, AdminOnly, async (req, res) => {
     try {
         const request = await Request.findById(req.params.id)
+            .populate('createdBy', '_id username')
+            .populate('reviewedBy', '_id username');
 
         if (!request) {
             return res.status(404).json({ 'message': 'Request not found' })
@@ -206,6 +296,34 @@ router.post('/:id/close', Authmiddlwhere, AdminOnly, async (req, res) => {
         request.status = "CLOSED"
         await request.save()
 
+        const template = notificationTemplates.REQUEST_CLOSED(request.title, req.user.username);
+
+        // 🔔 NOTIFY EMPLOYEE WHO CREATED THE REQUEST
+        await createNotification({
+            recipient: request.createdBy._id,
+            sender: req.user.id,
+            type: 'REQUEST_CLOSED',
+            title: template.title,
+            message: template.message,
+            relatedRequest: request._id,
+            link: `/employee/my-requests`
+        });
+
+        // 🔔 NOTIFY ALL MANAGERS
+        const managers = await User.find({ role: 'Manager' }).select('_id');
+        
+        for (const manager of managers) {
+            await createNotification({
+                recipient: manager._id,
+                sender: req.user.id,
+                type: 'REQUEST_CLOSED',
+                title: '🔒 Request Closed',
+                message: `Admin closed request: "${request.title}" by ${request.createdBy.username}`,
+                relatedRequest: request._id,
+                link: '/manager'
+            });
+        }
+
         return res.status(201).json({ 'message': 'Request closed successfully' })
     } catch (err) {
         console.error("Close request error:", err.message);
@@ -213,10 +331,11 @@ router.post('/:id/close', Authmiddlwhere, AdminOnly, async (req, res) => {
     }
 })
 
-// FIXED: Reopen changes status back to SUBMITTED so Manager can review again
+// 🔔 5. WHEN ADMIN REOPENS REQUEST - NOTIFY EMPLOYEE & MANAGER
 router.post('/:id/reopen', Authmiddlwhere, AdminOnly, async (req, res) => {
     try{
         const request = await Request.findById(req.params.id)
+            .populate('createdBy', '_id username');
 
         if(!request) {
             return res.status(404).json({'message': 'Request not found'})
@@ -229,6 +348,34 @@ router.post('/:id/reopen', Authmiddlwhere, AdminOnly, async (req, res) => {
         // Change status to SUBMITTED so Manager can approve/reject again
         request.status = "SUBMITTED"
         await request.save()
+
+        const template = notificationTemplates.REQUEST_REOPENED(request.title, req.user.username);
+
+        // 🔔 NOTIFY EMPLOYEE WHO CREATED THE REQUEST
+        await createNotification({
+            recipient: request.createdBy._id,
+            sender: req.user.id,
+            type: 'REQUEST_REOPENED',
+            title: template.title,
+            message: template.message,
+            relatedRequest: request._id,
+            link: `/employee/my-requests`
+        });
+
+        // 🔔 NOTIFY ALL MANAGERS
+        const managers = await User.find({ role: 'Manager' }).select('_id');
+        
+        for (const manager of managers) {
+            await createNotification({
+                recipient: manager._id,
+                sender: req.user.id,
+                type: 'REQUEST_REOPENED',
+                title: '🔓 Request Reopened',
+                message: `Admin reopened request: "${request.title}" by ${request.createdBy.username} for review`,
+                relatedRequest: request._id,
+                link: '/manager'
+            });
+        }
 
         return res.status(201).json({'message': 'Request reopened and sent back for review'})
     } catch (err) {
