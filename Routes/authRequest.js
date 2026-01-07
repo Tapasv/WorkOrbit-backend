@@ -281,61 +281,63 @@ router.get('/all', Authmiddlwhere, AdminOnly, async (req, res) => {
 });
 
 // 🔔 4. WHEN ADMIN CLOSES REQUEST - NOTIFY EMPLOYEE & MANAGER
+// 🔔 4. WHEN ADMIN CLOSES REQUEST - NOTIFY EMPLOYEE & MANAGER
 router.post('/:id/close', Authmiddlwhere, AdminOnly, async (req, res) => {
-    try {
-        const request = await Request.findById(req.params.id)
-            .populate('createdBy', '_id username')
-            .populate('reviewedBy', '_id username');
+  try {
+    const request = await Request.findById(req.params.id)
+    //   .populate('createdBy', '_id username');
 
-        if (!request) {
-            return res.status(404).json({ 'message': 'Request not found' })
-        }
-
-        if (
-            request.status !== "APPROVED" &&
-            request.status !== "REJECTED"
-        ) {
-            return res.status(409).json({ 'message': 'Only Approved or Rejected requests can be closed!!' })
-        }
-
-        request.status = "CLOSED"
-        await request.save()
-
-        const template = notificationTemplates.REQUEST_CLOSED(request.title, req.user.username);
-
-        // 🔔 NOTIFY EMPLOYEE WHO CREATED THE REQUEST
-        await createNotification({
-            recipient: request.createdBy._id,
-            sender: req.user.id,
-            type: 'REQUEST_CLOSED',
-            title: template.title,
-            message: template.message,
-            relatedRequest: request._id,
-            link: `/employee/my-requests`,
-            io: getIo(req) 
-        });
-
-        // 🔔 NOTIFY ALL MANAGERS
-        const managers = await User.find({ role: 'Manager' }).select('_id');
-
-        for (const manager of managers) {
-            await createNotification({
-                recipient: manager._id,
-                sender: req.user.id,
-                type: 'REQUEST_CLOSED',
-                title: '🔒 Request Closed',
-                message: `Admin closed request: "${request.title}" by ${request.createdBy.username}`,
-                relatedRequest: request._id,
-                link: '/manager',
-                io: getIo(req) 
-            });
-        }
-
-        return res.status(201).json({ 'message': 'Request closed successfully' })
-    } catch (err) {
-        console.error("Close request error:", err.message);
-        return res.status(500).json({ message: "Failed to close request" });
+    if (!request) {
+      return res.status(404).json({ 'message': 'Request not found' })
     }
+
+    if (
+      request.status !== "APPROVED" &&
+      request.status !== "REJECTED"
+    ) {
+      return res.status(409).json({ 'message': 'Only Approved or Rejected requests can be closed!!' })
+    }
+
+    request.status = "CLOSED"
+    await request.save()
+
+    const template = notificationTemplates.REQUEST_CLOSED(request.title, req.user.username);
+    const io = req.app.get('io'); // ⬅️ ADD THIS
+
+    // 🔔 NOTIFY EMPLOYEE WHO CREATED THE REQUEST
+    await createNotification({
+      recipient: request.createdBy._id,
+      sender: req.user.id,
+      type: 'REQUEST_CLOSED',
+      title: template.title,
+      message: template.message,
+      relatedRequest: request._id,
+      link: `/employee/my-requests`,
+      io: io // ⬅️ ADD THIS
+    });
+
+    // 🔔 NOTIFY ALL MANAGERS
+    const managers = await User.find({ role: 'Manager' }).select('_id');
+
+    for (const manager of managers) {
+      await createNotification({
+        recipient: manager._id,
+        sender: req.user.id,
+        type: 'REQUEST_CLOSED',
+        title: '🔒 Request Closed',
+        message: `Admin closed request: "${request.title}" by ${request.createdBy.username}`,
+        relatedRequest: request._id,
+        link: '/manager',
+        io: io // ⬅️ ADD THIS
+      });
+    }
+
+    return res.status(201).json({ 'message': 'Request closed successfully' })
+  } catch (err) {
+    console.error("Close request error:", err.message);
+    console.error("Full error:", err); // ⬅️ ADD THIS for better debugging
+    return res.status(500).json({ message: "Failed to close request", error: err.message });
+  }
 })
 
 // 🔔 5. WHEN ADMIN REOPENS REQUEST - NOTIFY EMPLOYEE & MANAGER
