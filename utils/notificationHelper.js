@@ -1,6 +1,6 @@
 const Notification = require('../Schemas/Notification');
 
-// Create a notification
+// Create a notification and emit via Socket.io
 const createNotification = async ({
   recipient,
   sender,
@@ -9,7 +9,8 @@ const createNotification = async ({
   message,
   relatedRequest = null,
   relatedTeam = null,
-  link = null
+  link = null,
+  io = null // Socket.io instance
 }) => {
   try {
     const notification = await Notification.create({
@@ -24,6 +25,24 @@ const createNotification = async ({
     });
 
     console.log('✅ Notification created:', notification._id);
+
+    // 🔌 EMIT REAL-TIME NOTIFICATION via Socket.io
+    if (io) {
+      const populatedNotification = await Notification.findById(notification._id)
+        .populate('sender', 'username email role');
+
+      // Emit to specific user's room
+      io.to(`user:${recipient}`).emit('new-notification', {
+        notification: populatedNotification,
+        unreadCount: await Notification.countDocuments({ 
+          recipient, 
+          isRead: false 
+        })
+      });
+
+      console.log(`🔔 Socket notification sent to user: ${recipient}`);
+    }
+
     return notification;
   } catch (error) {
     console.error('❌ Failed to create notification:', error);
@@ -33,49 +52,41 @@ const createNotification = async ({
 
 // Notification templates
 const notificationTemplates = {
-  // Employee receives when manager approves
   REQUEST_APPROVED: (requestTitle, managerName) => ({
     title: '✅ Request Approved',
     message: `Your request "${requestTitle}" has been approved by ${managerName}`
   }),
   
-  // Employee receives when manager rejects
   REQUEST_REJECTED: (requestTitle, managerName) => ({
     title: '❌ Request Rejected',
     message: `Your request "${requestTitle}" has been rejected by ${managerName}`
   }),
   
-  // Manager & Admin receive when employee submits
   REQUEST_SUBMITTED: (requestTitle, employeeName) => ({
     title: '📝 New Request Submitted',
     message: `${employeeName} has submitted a new request: "${requestTitle}"`
   }),
   
-  // Employee & Manager receive when admin closes
   REQUEST_CLOSED: (requestTitle, adminName) => ({
     title: '🔒 Request Closed',
     message: `Your request "${requestTitle}" has been closed by ${adminName}`
   }),
   
-  // Employee & Manager receive when admin reopens
   REQUEST_REOPENED: (requestTitle, adminName) => ({
     title: '🔓 Request Reopened',
     message: `Your request "${requestTitle}" has been reopened by ${adminName} for review`
   }),
   
-  // Employee receives when added to team
   TEAM_ADDED: (teamName, managerName) => ({
     title: '👥 Added to Team',
     message: `You have been added to team "${teamName}" by ${managerName}`
   }),
   
-  // Employee receives when removed from team
   TEAM_REMOVED: (teamName, managerName) => ({
     title: '👋 Removed from Team',
     message: `You have been removed from team "${teamName}" by ${managerName}`
   }),
   
-  // Employee receives when attendance is marked
   ATTENDANCE_MARKED: (date) => ({
     title: '✓ Attendance Marked',
     message: `Your attendance for ${date} has been marked successfully`

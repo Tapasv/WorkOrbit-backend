@@ -4,6 +4,7 @@ const { Authmiddlwhere, AdminOnly } = require('../middlewhere/Authmiddlewhere');
 const Team = require('../Schemas/Team');
 const User = require('../Schemas/User');
 const { createNotification, notificationTemplates } = require('../utils/notificationHelper');
+const getIo = (req) => req.app.get('io');
 
 // ⚠️ IMPORTANT: Specific routes MUST come BEFORE dynamic /:id routes
 
@@ -100,7 +101,8 @@ router.post("/create-team", Authmiddlwhere, async (req, res) => {
           title: template.title,
           message: template.message,
           relatedTeam: team._id,
-          link: '/employee'
+          link: '/employee',
+          io: getIo(req) 
         });
       }
     }
@@ -191,7 +193,8 @@ router.put("/:id", Authmiddlwhere, async (req, res) => {
             title: addTemplate.title,
             message: addTemplate.message,
             relatedTeam: team._id,
-            link: '/employee'
+            link: '/employee',
+            io: getIo(req) 
           });
         }
       }
@@ -208,7 +211,8 @@ router.put("/:id", Authmiddlwhere, async (req, res) => {
             title: removeTemplate.title,
             message: removeTemplate.message,
             relatedTeam: team._id,
-            link: '/employee'
+            link: '/employee',
+            io: getIo(req) 
           });
         }
       }
@@ -261,7 +265,8 @@ router.delete("/:id", Authmiddlwhere, async (req, res) => {
           type: 'TEAM_REMOVED',
           title: '🗑️ Team Deleted',
           message: `Team "${team.name}" has been deleted by ${req.user.username}`,
-          link: '/employee'
+          link: '/employee',
+          io: getIo(req) 
         });
       }
     }

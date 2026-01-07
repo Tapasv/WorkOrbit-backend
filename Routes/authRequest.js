@@ -4,6 +4,7 @@ const { Authmiddlwhere, AdminOnly } = require('../middlewhere/Authmiddlewhere')
 const Request = require('../Schemas/Request');
 const User = require('../Schemas/User');
 const { createNotification, notificationTemplates } = require('../utils/notificationHelper');
+const getIo = (req) => req.app.get('io');
 
 //  EMPLOYEE ROUTES
 
@@ -68,7 +69,8 @@ router.post('/:id/submit', Authmiddlwhere, async (req, res) => {
                 title: template.title,
                 message: template.message,
                 relatedRequest: request._id,
-                link: user.role === 'Manager' ? '/manager' : '/admin'
+                link: user.role === 'Manager' ? '/manager' : '/admin',
+                io: getIo(req) 
             });
         }
 
@@ -185,7 +187,8 @@ router.post("/:id/approve", Authmiddlwhere, async (req, res) => {
                 title: template.title,
                 message: template.message,
                 relatedRequest: request._id,
-                link: `/employee/my-requests`
+                link: `/employee/my-requests`,
+                io: getIo(req) 
             });
 
             console.log('✅ Notification created successfully:', notification._id);
@@ -233,7 +236,8 @@ router.post("/:id/reject", Authmiddlwhere, async (req, res) => {
             title: template.title,
             message: template.message,
             relatedRequest: request._id,
-            link: `/employee/my-requests`
+            link: `/employee/my-requests`,
+            io: getIo(req) 
         });
 
         // 🔔 NOTIFY ALL ADMINS
@@ -247,7 +251,8 @@ router.post("/:id/reject", Authmiddlwhere, async (req, res) => {
                 title: '❌ Request Rejected',
                 message: `${req.user.username} rejected request: "${request.title}" by ${request.createdBy.username}`,
                 relatedRequest: request._id,
-                link: '/admin'
+                link: '/admin',
+                io: getIo(req) 
             });
         }
 
@@ -306,7 +311,8 @@ router.post('/:id/close', Authmiddlwhere, AdminOnly, async (req, res) => {
             title: template.title,
             message: template.message,
             relatedRequest: request._id,
-            link: `/employee/my-requests`
+            link: `/employee/my-requests`,
+            io: getIo(req) 
         });
 
         // 🔔 NOTIFY ALL MANAGERS
@@ -320,7 +326,8 @@ router.post('/:id/close', Authmiddlwhere, AdminOnly, async (req, res) => {
                 title: '🔒 Request Closed',
                 message: `Admin closed request: "${request.title}" by ${request.createdBy.username}`,
                 relatedRequest: request._id,
-                link: '/manager'
+                link: '/manager',
+                io: getIo(req) 
             });
         }
 
@@ -359,7 +366,8 @@ router.post('/:id/reopen', Authmiddlwhere, AdminOnly, async (req, res) => {
             title: template.title,
             message: template.message,
             relatedRequest: request._id,
-            link: `/employee/my-requests`
+            link: `/employee/my-requests`,
+            io: getIo(req) 
         });
 
         // 🔔 NOTIFY ALL MANAGERS
@@ -373,7 +381,8 @@ router.post('/:id/reopen', Authmiddlwhere, AdminOnly, async (req, res) => {
                 title: '🔓 Request Reopened',
                 message: `Admin reopened request: "${request.title}" by ${request.createdBy.username} for review`,
                 relatedRequest: request._id,
-                link: '/manager'
+                link: '/manager',
+                io: getIo(req) 
             });
         }
 
