@@ -93,13 +93,11 @@ app.use(cors(corsOptions));
 app.use(express.json());
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'ok', 
-    message: 'Server is running',
-    timestamp: new Date(),
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "OK",
     uptime: process.uptime(),
-    connectedUsers: connectedUsers.size
+    timestamp: Date.now()
   });
 });
 

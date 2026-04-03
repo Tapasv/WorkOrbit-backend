@@ -280,8 +280,6 @@ router.get('/all', Authmiddlwhere, AdminOnly, async (req, res) => {
     }
 });
 
-// 🔔 4. WHEN ADMIN CLOSES REQUEST - NOTIFY EMPLOYEE & MANAGER
-// 🔔 4. WHEN ADMIN CLOSES REQUEST - NOTIFY EMPLOYEE & MANAGER
 router.post('/:id/close', Authmiddlwhere, AdminOnly, async (req, res) => {
   try {
     const request = await Request.findById(req.params.id)
